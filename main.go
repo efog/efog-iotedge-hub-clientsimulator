@@ -1,11 +1,46 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
+	"time"
 
 	efogIotEdgeHubServer "github.com/efog/efog-iotedge-hub"
+	zmq "github.com/pebbe/zmq4"
 	zap "go.uber.org/zap"
 )
+
+func subscriber_thread(endpoint *string) {
+	//  Subscribe to "A" and "B"
+	subscriber, _ := zmq.NewSocket(zmq.SUB)
+	subscriber.Connect(*endpoint)
+	subscriber.SetSubscribe("A")
+	subscriber.SetSubscribe("B")
+	subscriber.SetSubscribe("C")
+	defer subscriber.Close() // cancel subscribe
+	for i := 0; i < 10; i++ {
+		msg, err := subscriber.RecvMessage(0)
+		if err != nil {
+			break //  Interrupted
+		}
+		log.Printf("Received %q", msg)
+	}
+}
+
+func publisher_thread(endpoint *string) {
+	publisher, _ := zmq.NewSocket(zmq.PUB)
+	publisher.Bind(*endpoint)
+	for i := 0; i < 10; i++ {
+		s := fmt.Sprintf("%c-%05d", rand.Intn(3)+'A', rand.Intn(100000))
+		log.Printf("Sending %q", s)
+		_, err := publisher.SendMessage(s)
+		if err != nil {
+			break //  Interrupted
+		}
+		time.Sleep(1000 * time.Millisecond) //  Wait for 1/10th second
+	}
+}
 
 func main() {
 	logger := zap.NewExample()
@@ -20,5 +55,9 @@ func main() {
 	wantBackEndBind := "tcp://*:56789"
 	wantBackEndConnect := "tcp://localhost:56789"
 	server := efogIotEdgeHubServer.NewServer(&wantBackEndBind, &wantBackEndConnect, &wantFrontEndBind, &wantFrontEndConnect)
+
+	go publisher_thread(&wantFrontEndBind)
+	go subscriber_thread(&wantBackEndConnect)
+	
 	server.Run()
 }
