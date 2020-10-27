@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 
-	efogIotEdgeHubServer "github.com/efog/efog-iotedge-hub"
 	zmq "github.com/pebbe/zmq4"
 	zap "go.uber.org/zap"
 )
 
-func subscriber_thread(endpoint *string) {
+func subscriberThread(endpoint *string) {
 	//  Subscribe to "A" and "B"
 	subscriber, _ := zmq.NewSocket(zmq.SUB)
 	subscriber.Connect(*endpoint)
@@ -28,7 +28,7 @@ func subscriber_thread(endpoint *string) {
 	}
 }
 
-func publisher_thread(endpoint *string) {
+func publisherThread(endpoint *string) {
 	publisher, _ := zmq.NewSocket(zmq.PUB)
 	publisher.Bind(*endpoint)
 	for {
@@ -38,7 +38,7 @@ func publisher_thread(endpoint *string) {
 		if err != nil {
 			break //  Interrupted
 		}
-		time.Sleep(10 * time.Millisecond) //  Wait for 1/10th second
+		time.Sleep(1000 * time.Millisecond) //  Wait for 1/10th second
 	}
 }
 
@@ -48,16 +48,23 @@ func main() {
 
 	undo := zap.RedirectStdLog(logger)
 	defer undo()
-	log.Print("redirected standard library")
-	log.Print("Starting client simulator")
-	wantFrontEndBind := "tcp://*:12345"
-	wantFrontEndConnect := "tcp://localhost:12345"
-	wantBackEndBind := "tcp://*:56789"
-	wantBackEndConnect := "tcp://localhost:56789"
-	server := efogIotEdgeHubServer.NewServer(&wantBackEndBind, &wantBackEndConnect, &wantFrontEndBind, &wantFrontEndConnect)
 
-	go publisher_thread(&wantFrontEndBind)
-	go subscriber_thread(&wantBackEndConnect)
-	
-	server.Run()
+	var backendHost string
+	var backendPort string
+	var frontendPort string
+
+	backendHost = os.Getenv("BACKEND_HOST")
+	backendPort = os.Getenv("BACKEND_PORT")
+	frontendPort = os.Getenv("FRONTEND_PORT")
+
+	log.Print("Redirected standard library")
+	log.Print("Starting client simulator")
+	wantFrontEndBind := fmt.Sprintf("tcp://*:%q", frontendPort)
+	wantBackEndConnect := fmt.Sprintf("tcp://%q:%q", backendHost, backendPort)
+	log.Printf("Frontend endpoint %q", wantFrontEndBind)
+	log.Printf("Backend endpoint %q", wantBackEndConnect)
+
+	go subscriberThread(&wantBackEndConnect)
+	publisherThread(&wantFrontEndBind)
+
 }
