@@ -24,7 +24,7 @@ func subscriberThread(endpoint *string) {
 		if err != nil {
 			break //  Interrupted
 		}
-		log.Printf("Received %q", msg)
+		log.Printf("Received %s", msg)
 	}
 }
 
@@ -33,7 +33,7 @@ func publisherThread(endpoint *string) {
 	publisher.Bind(*endpoint)
 	for {
 		s := fmt.Sprintf("%c-%05d", rand.Intn(3)+'A', rand.Intn(100000))
-		log.Printf("Sending %q", s)
+		log.Printf("Sending %s", s)
 		_, err := publisher.SendMessage(s)
 		if err != nil {
 			break //  Interrupted
@@ -56,13 +56,22 @@ func main() {
 	backendHost = os.Getenv("BACKEND_HOST")
 	backendPort = os.Getenv("BACKEND_PORT")
 	frontendPort = os.Getenv("FRONTEND_PORT")
+	if backendHost == "" {
+		backendHost = "localhost"
+	}
+	if backendPort == "" {
+		backendPort = "56789"
+	}
+	if frontendPort == "" {
+		frontendPort = "12345"
+	}
 
 	log.Print("Redirected standard library")
 	log.Print("Starting client simulator")
-	wantFrontEndBind := fmt.Sprintf("tcp://*:%q", frontendPort)
-	wantBackEndConnect := fmt.Sprintf("tcp://%q:%q", backendHost, backendPort)
-	log.Printf("Frontend endpoint %q", wantFrontEndBind)
-	log.Printf("Backend endpoint %q", wantBackEndConnect)
+	wantFrontEndBind := fmt.Sprintf("tcp://*:%s", frontendPort)
+	wantBackEndConnect := fmt.Sprintf("tcp://%s:%s", backendHost, backendPort)
+	log.Printf("Frontend endpoint %s", wantFrontEndBind)
+	log.Printf("Backend endpoint %s", wantBackEndConnect)
 
 	go subscriberThread(&wantBackEndConnect)
 	publisherThread(&wantFrontEndBind)
