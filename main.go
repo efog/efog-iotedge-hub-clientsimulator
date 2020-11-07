@@ -8,33 +8,14 @@ import (
 	"time"
 
 	zmq "github.com/pebbe/zmq4"
-	zap "go.uber.org/zap"
 )
 
-func subscriberThread(endpoint *string) {
-	//  Subscribe to "A" and "B"
-	subscriber, _ := zmq.NewSocket(zmq.SUB)
-	subscriber.Connect(*endpoint)
-	subscriber.SetSubscribe("A")
-	subscriber.SetSubscribe("B")
-	subscriber.SetSubscribe("C")
-	defer subscriber.Close() // cancel subscribe
+func publish(publisher *zmq.Socket) {
 	for {
-		msg, err := subscriber.RecvMessage(0)
-		if err != nil {
-			break //  Interrupted
-		}
-		log.Printf("Received %s", msg)
-	}
-}
-
-func publisherThread(endpoint *string) {
-	publisher, _ := zmq.NewSocket(zmq.PUB)
-	publisher.Bind(*endpoint)
-	for {
-		s := fmt.Sprintf("%c-%05d", rand.Intn(3)+'A', rand.Intn(100000))
-		log.Printf("Sending %s", s)
-		_, err := publisher.SendMessage(s)
+		topic := rand.Intn(3) + 'A'
+		s := fmt.Sprintf("%c-%05d", topic, rand.Intn(100000))
+		log.Printf("Sending %s to topic %c", s, topic)
+		_, err := publisher.SendMessage(fmt.Sprintf("%c", topic), s)
 		if err != nil {
 			break //  Interrupted
 		}
@@ -43,37 +24,35 @@ func publisherThread(endpoint *string) {
 }
 
 func main() {
-	logger := zap.NewExample()
-	defer logger.Sync()
-
-	undo := zap.RedirectStdLog(logger)
-	defer undo()
-
-	var backendHost string
-	var backendPort string
-	var frontendPort string
-
-	backendHost = os.Getenv("BACKEND_HOST")
-	backendPort = os.Getenv("BACKEND_PORT")
-	frontendPort = os.Getenv("FRONTEND_PORT")
-	if backendHost == "" {
-		backendHost = "localhost"
+	publisherEndpoint := os.Getenv("PUBLISHER_ENDPOINT")
+	subscriberEndpoint := os.Getenv("SUBSCRIBER_ENDPOINT")
+	if &publisherEndpoint == nil {
+		publisherEndpoint = "tcp://localhost:7000"
 	}
-	if backendPort == "" {
-		backendPort = "56789"
-	}
-	if frontendPort == "" {
-		frontendPort = "12345"
+	if &subscriberEndpoint == nil {
+		subscriberEndpoint = "tcp://localhost:7001"
 	}
 
-	log.Print("Redirected standard library")
-	log.Print("Starting client simulator")
-	wantFrontEndBind := fmt.Sprintf("tcp://*:%s", frontendPort)
-	wantBackEndConnect := fmt.Sprintf("tcp://%s:%s", backendHost, backendPort)
-	log.Printf("Frontend endpoint %s", wantFrontEndBind)
-	log.Printf("Backend endpoint %s", wantBackEndConnect)
+	log.Print("Starting pub server")
+	publisher, _ := zmq.NewSocket(zmq.PUB)
+	defer publisher.Close()
+	publisher.Connect(publisherEndpoint)
+	log.Printf("Connected publisher to endpoint %s", publisherEndpoint)
 
-	go subscriberThread(&wantBackEndConnect)
-	publisherThread(&wantFrontEndBind)
+	log.Print("Starting sub server")
+	subscriber, _ := zmq.NewSocket(zmq.SUB)
+	defer subscriber.Close()
+	subscriber.Connect(subscriberEndpoint)
+	subscriber.SetSubscribe("A")
+	subscriber.SetSubscribe("B")
+	subscriber.SetSubscribe("C")
+	log.Printf("Connected subscriber to endpoint %s", subscriberEndpoint)
+
+	go publish(publisher)
+
+	for {
+		msg, _ := subscriber.RecvMessage(0)
+		log.Printf("Received %s", msg)
+	}
 
 }
